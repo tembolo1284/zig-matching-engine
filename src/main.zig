@@ -38,9 +38,9 @@ pub fn main() !void {
 
     var port: u16 = 1234; // Default port
     if (args.next()) |arg| {
-        port = std.fmt.parseInt(u16, arg, 10) catch {
+        port = std.fmt.parseInt(u16, arg, 10) catch blk: {
             std.log.err("Invalid port number, using default: 1234", .{});
-            1234
+            break :blk 1234;
         };
     }
 
@@ -86,13 +86,13 @@ pub fn main() !void {
     std.log.info("Starting threads...", .{});
     
     try receiver.start();
-    std.log.info("  ✓ UDP Receiver started", .{});
+    std.log.info("  UDP Receiver started", .{});
     
     try processor.start();
-    std.log.info("  ✓ Processor started", .{});
+    std.log.info("  Processor started", .{});
     
     try publisher.start();
-    std.log.info("  ✓ Output Publisher started", .{});
+    std.log.info("  Output Publisher started", .{});
 
     std.log.info("==============================================================", .{});
     std.log.info("All threads started. System is running.", .{});
@@ -105,10 +105,10 @@ pub fn main() !void {
 
         // Optional: Monitor queue depths (useful for debugging)
         // Uncomment to see real-time queue usage:
-        // if (input_queue.size() > 1000 or output_queue.size() > 1000) {
+        // if (input_queue.len() > 1000 or output_queue.len() > 1000) {
         //     std.log.warn("Queue depths - Input: {d}, Output: {d}", .{
-        //         input_queue.size(),
-        //         output_queue.size(),
+        //         input_queue.len(),
+        //         output_queue.len(),
         //     });
         // }
     }
@@ -121,12 +121,12 @@ pub fn main() !void {
     // Stop receiver first (no more input)
     std.log.info("Stopping UDP receiver...", .{});
     receiver.stop();
-    std.log.info("  ✓ UDP Receiver stopped", .{});
+    std.log.info("  UDP Receiver stopped", .{});
 
     // Give processor time to drain input queue
-    std.log.info("Draining input queue (size: {d})...", .{input_queue.size()});
+    std.log.info("Draining input queue (size: {d})...", .{input_queue.len()});
     std.time.sleep(200_000_000); // 200ms
-    std.log.info("  ✓ Input queue drained (remaining: {d})", .{input_queue.size()});
+    std.log.info("  Input queue drained (remaining: {d})", .{input_queue.len()});
 
     // Stop processor (no more processing)
     std.log.info("Stopping processor...", .{});
@@ -134,14 +134,14 @@ pub fn main() !void {
     std.log.info("  ✓ Processor stopped", .{});
 
     // Give publisher time to drain output queue
-    std.log.info("Draining output queue (size: {d})...", .{output_queue.size()});
+    std.log.info("Draining output queue (size: {d})...", .{output_queue.len()});
     std.time.sleep(200_000_000); // 200ms
-    std.log.info("  ✓ Output queue drained (remaining: {d})", .{output_queue.size()});
+    std.log.info("  Output queue drained (remaining: {d})", .{output_queue.len()});
 
     // Stop publisher (no more output)
     std.log.info("Stopping output publisher...", .{});
     publisher.stop();
-    std.log.info("  ✓ Output Publisher stopped", .{});
+    std.log.info("  Output Publisher stopped", .{});
 
     // Print statistics
     std.log.info("==============================================================", .{});

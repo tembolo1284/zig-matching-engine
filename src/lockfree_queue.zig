@@ -104,14 +104,15 @@ pub fn LockFreeQueue(comptime T: type, comptime size: usize) type {
         }
 
         /// Get approximate size (may be stale due to concurrent access)
-        pub fn size(self: *const Self) usize {
+        pub fn len(self: *const Self) usize {
             const h = self.head.load(.acquire);
             const t = self.tail.load(.acquire);
             return (t -% h) & MASK; // Wrapping subtraction handles wraparound
         }
 
         /// Get capacity
-        pub fn capacity() usize {
+        pub fn capacity(self: *const Self) usize {
+            _ = self;
             return size;
         }
     };
@@ -167,19 +168,19 @@ test "LockFreeQueue: isEmpty" {
 test "LockFreeQueue: size tracking" {
     var queue = LockFreeQueue(u32, 8).init();
 
-    try std.testing.expectEqual(@as(usize, 0), queue.size());
+    try std.testing.expectEqual(@as(usize, 0), queue.len());
     
     try std.testing.expect(queue.push(1));
-    try std.testing.expectEqual(@as(usize, 1), queue.size());
+    try std.testing.expectEqual(@as(usize, 1), queue.len());
     
     try std.testing.expect(queue.push(2));
-    try std.testing.expectEqual(@as(usize, 2), queue.size());
+    try std.testing.expectEqual(@as(usize, 2), queue.len());
     
     _ = queue.pop();
-    try std.testing.expectEqual(@as(usize, 1), queue.size());
+    try std.testing.expectEqual(@as(usize, 1), queue.len());
     
     _ = queue.pop();
-    try std.testing.expectEqual(@as(usize, 0), queue.size());
+    try std.testing.expectEqual(@as(usize, 0), queue.len());
 }
 
 test "LockFreeQueue: wraparound" {

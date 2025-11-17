@@ -132,17 +132,18 @@ pub const UdpReceiver = struct {
             &std.mem.toBytes(buffer_size),
         );
 
-        // Verify buffer size was set
-        var actual_size: c_int = 0;
-        var opt_len: u32 = @sizeOf(c_int);
-        try posix.getsockopt(
+        const timeout = std.posix.timeval{
+        .tv_sec = 1,  // 1 second timeout
+        .tv_usec = 0,
+        };
+        try posix.setsockopt(
             self.socket_fd,
             posix.SOL.SOCKET,
-            posix.SO.RCVBUF,
-            std.mem.asBytes(&actual_size),
-            &opt_len,
+            posix.SO.RCVTIMEO,
+            std.mem.asBytes(&timeout),
         );
-        std.log.info("UDP socket receive buffer size: {d} bytes", .{actual_size});
+
+        std.log.info("UDP socket receive buffer size: {d} bytes", .{buffer_size});
 
         // Bind socket to port
         // sockaddr_in structure for IPv4 address
@@ -172,14 +173,19 @@ pub const UdpReceiver = struct {
                 null, // sender address (we don't need it)
                 null, // sender address length
             ) catch |err| {
-                // Socket closed or error
+                // Check for timeout (expected during shutdown check)
+                if (err == error.WouldBlock or err == error.Again) {
+                    // Timeout - just loop and check running flag
+                    continue;
+                }
+    
+                // Socket closed or other error
                 if (!self.running.load(.monotonic)) {
-                    break; // Graceful shutdown
+                   break; // Graceful shutdown
                 }
                 std.log.err("recvfrom() error: {}", .{err});
                 continue;
             };
-
             if (bytes_received == 0) {
                 continue; // Empty packet
             }
