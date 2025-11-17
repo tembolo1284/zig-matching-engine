@@ -147,18 +147,22 @@ pub const MatchingEngine = struct {
     fn processFlush(self: *MatchingEngine, outputs: *std.ArrayList(OutputMessage)) !void {
         // First, broadcast cancel acks for ALL open orders
         var order_it = self.order_to_symbol.keyIterator();
-        while (order_it.next()) |key_ptr| {
-            const key = key_ptr.*;
+        while (order_it.next()) |entry| {
+            const key = entry.key_ptr.*;
+            const symbol = entry.value_ptr.*;
+
             // Decode the order key back to user_id and user_order_id
             const user_id: u32 = @truncate(key >> 32);
             const user_order_id: u32 = @truncate(key);
         
-            try outputs.append(.{
-                .cancel_ack = .{
+            var cancel_ack = CancelAckMsg{
                     .user_id = user_id,
                     .user_order_id = user_order_id,
-                },
-            });
+                    .symbol = undefined,
+                    .symbol_len = 0, 
+            };
+            try cancel_ack.setSymbol(symbol);
+            try outputs.append(.{ .cancel_ack = cancel_ack });
         }
 
         // Clean up all order books

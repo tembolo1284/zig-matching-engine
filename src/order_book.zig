@@ -126,13 +126,15 @@ pub const OrderBook = struct {
     ) !void {
         var working_order = order;
 
-        // Send acknowledgement FIRST (before matching)
-        try outputs.append(.{
-            .ack = AckMsg{
-                .user_id = order.user_id,
-                .user_order_id = order.user_order_id,
-            },
-        });
+        // Send acknowledgement FIRST (before matching) with symbol
+        var ack = AckMsg{
+            .user_id = order.user_id,
+            .user_order_id = order.user_order_id,
+            .symbol = undefined,
+            .symbol_len = 0,
+        };
+        try ack.setSymbol(self.getSymbol());
+        try outputs.append(.{ .ack = ack });
 
         // Try to match against existing orders
         try self.matchOrder(&working_order, outputs);
@@ -181,13 +183,15 @@ pub const OrderBook = struct {
             _ = self.order_map.remove(key);
         }
 
-        // Send cancel acknowledgement (even if order not found)
-        try outputs.append(.{
-            .cancel_ack = CancelAckMsg{
-                .user_id = user_id,
-                .user_order_id = user_order_id,
-            },
-        });
+        // Send cancel acknowledgement (even if order not found) with symbol
+        var cancel_ack = CancelAckMsg{
+            .user_id = user_id,
+            .user_order_id = user_order_id,
+            .symbol = undefined,
+            .symbol_len = 0,
+        };
+        try cancel_ack.setSymbol(self.getSymbol());
+        try outputs.append(.{ .cancel_ack = cancel_ack });
 
         // Check for top-of-book changes
         try self.checkTopOfBookChanges(outputs);
@@ -278,6 +282,8 @@ pub const OrderBook = struct {
                     .user_order_id_sell = book_order.user_order_id,
                     .price = level.price, // Trade at passive order price
                     .quantity = match_qty,
+                    .symbol = undefined,
+                    .symbol_len = 0,
                 } else TradeMsg{
                     .user_id_buy = book_order.user_id,
                     .user_order_id_buy = book_order.user_order_id,
@@ -285,7 +291,11 @@ pub const OrderBook = struct {
                     .user_order_id_sell = order.user_order_id,
                     .price = level.price, // Trade at passive order price
                     .quantity = match_qty,
+                    .symbol = undefined,
+                    .symbol_len = 0,
                 };
+
+                try trade.setSymbol(self.getSymbol());               
 
                 try outputs.append(.{ .trade = trade });
 
@@ -363,66 +373,66 @@ pub const OrderBook = struct {
         if (current_best_bid_price != self.prev_best_bid_price or
             current_best_bid_qty != self.prev_best_bid_qty)
         {
-            if (current_best_bid_price == 0) {
-                // Bid side eliminated
-                try outputs.append(.{
-                    .top_of_book = TopOfBookMsg{
-                        .side = .buy,
-                        .tob = TopOfBook{
-                            .price = 0,
-                            .total_quantity = 0,
-                            .eliminated = true,
-                        },
-                    },
-                });
-            } else {
-                try outputs.append(.{
-                    .top_of_book = TopOfBookMsg{
-                        .side = .buy,
-                        .tob = TopOfBook{
-                            .price = current_best_bid_price,
-                            .total_quantity = current_best_bid_qty,
-                            .eliminated = false,
-                        },
-                    },
-                });
-            }
+            var tob_msg = TopOfBookMsg{
+            .side = .buy,
+            .tob = undefined,
+            .symbol = undefined,
+            .symbol_len = 0,
+        };
+        try tob_msg.setSymbol(self.getSymbol());
 
-            self.prev_best_bid_price = current_best_bid_price;
-            self.prev_best_bid_qty = current_best_bid_qty;
+        if (current_best_bid_price == 0) {
+            // Bid side eliminated
+            tob_msg.tob = TopOfBook{
+                .price = 0,
+                .total_quantity = 0,
+                .eliminated = true,
+            };
+        } else {
+            tob_msg.tob = TopOfBook{
+                .price = current_best_bid_price,
+                .total_quantity = current_best_bid_qty,
+                .eliminated = false,
+            };
+        }
+        try outputs.append(.{ .top_of_book = tob_msg });
+
+        self.prev_best_bid_price = current_best_bid_price;
+        self.prev_best_bid_qty = current_best_bid_qty;
         }
 
         // Check ask side changes
         if (current_best_ask_price != self.prev_best_ask_price or
             current_best_ask_qty != self.prev_best_ask_qty)
         {
-            if (current_best_ask_price == 0) {
-                // Ask side eliminated
-                try outputs.append(.{
-                    .top_of_book = TopOfBookMsg{
-                        .side = .sell,
-                        .tob = TopOfBook{
-                            .price = 0,
-                            .total_quantity = 0,
-                            .eliminated = true,
-                        },
-                    },
-                });
-            } else {
-                try outputs.append(.{
-                    .top_of_book = TopOfBookMsg{
-                        .side = .sell,
-                        .tob = TopOfBook{
-                            .price = current_best_ask_price,
-                            .total_quantity = current_best_ask_qty,
-                            .eliminated = false,
-                        },
-                    },
-                });
-            }
 
-            self.prev_best_ask_price = current_best_ask_price;
-            self.prev_best_ask_qty = current_best_ask_qty;
+            var tob_msg = TopOfBookMsg{
+            .side = .sell,
+            .tob = undefined,
+            .symbol = undefined,
+            .symbol_len = 0,
+        };
+        try tob_msg.setSymbol(self.getSymbol());
+
+        if (current_best_ask_price == 0) {
+            // Ask side eliminated
+            tob_msg.tob = TopOfBook{
+                .price = 0,
+                .total_quantity = 0,
+                .eliminated = true,
+            };
+        } else {
+            tob_msg.tob = TopOfBook{
+                .price = current_best_ask_price,
+                .total_quantity = current_best_ask_qty,
+                .eliminated = false,
+            };
+        }
+    
+        try outputs.append(.{ .top_of_book = tob_msg });
+
+        self.prev_best_ask_price = current_best_ask_price;
+        self.prev_best_ask_qty = current_best_ask_qty;
         }
     }
 

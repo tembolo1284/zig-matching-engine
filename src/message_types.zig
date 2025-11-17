@@ -87,6 +87,18 @@ pub const InputMessage = union(enum) {
 pub const AckMsg = struct {
     user_id: u32,
     user_order_id: u32,
+    symbol: [16]u8,
+    symbol_len: u8,
+
+    pub fn getSymbol(self: *const AckMsg) []const u8 {
+        return self.symbol[0..self.symbol_len];
+    }
+
+    pub fn setSymbol(self: *AckMsg, symbol: []const u8) !void {
+        if (symbol.len > 16) return error.SymbolTooLong;
+        @memcpy(self.symbol[0..symbol.len], symbol);
+        self.symbol_len = @intCast(symbol.len);
+    }
 };
 
 /// Trade message
@@ -97,6 +109,18 @@ pub const TradeMsg = struct {
     user_order_id_sell: u32,
     price: u32,
     quantity: u32,
+    symbol: [16]u8,
+    symbol_len: u8,
+
+    pub fn getSymbol(self: *const TradeMsg) []const u8 {
+        return self.symbol[0..self.symbol_len];
+    }
+
+    pub fn setSymbol(self: *TradeMsg, symbol: []const u8) !void {
+        if (symbol.len > 16) return error.SymbolTooLong;
+        @memcpy(self.symbol[0..symbol.len], symbol);
+        self.symbol_len = @intCast(symbol.len);
+    }
 };
 
 /// Top of book data
@@ -110,12 +134,36 @@ pub const TopOfBook = struct {
 pub const TopOfBookMsg = struct {
     side: Side,
     tob: TopOfBook,
+    symbol: [16]u8,
+    symbol_len: u8,
+
+    pub fn getSymbol(self: *const TopOfBookMsg) []const u8 {
+        return self.symbol[0..self.symbol_len];
+    }
+
+    pub fn setSymbol(self: *TopOfBookMsg, symbol: []const u8) !void {
+        if (symbol.len > 16) return error.SymbolTooLong;
+        @memcpy(self.symbol[0..symbol.len], symbol);
+        self.symbol_len = @intCast(symbol.len);
+    }
 };
 
 /// Cancel acknowledgement
 pub const CancelAckMsg = struct {
     user_id: u32,
     user_order_id: u32,
+    symbol: [16]u8,
+    symbol_len: u8,
+
+    pub fn getSymbol(self: *const CancelAckMsg) []const u8 {
+        return self.symbol[0..self.symbol_len];
+    }
+
+    pub fn setSymbol(self: *CancelAckMsg, symbol: []const u8) !void {
+        if (symbol.len > 16) return error.SymbolTooLong;
+        @memcpy(self.symbol[0..symbol.len], symbol);
+        self.symbol_len = @intCast(symbol.len);
+    }
 };
 
 /// Output message - tagged union
@@ -211,32 +259,42 @@ fn parseU32(s: []const u8) !u32 {
 pub fn formatOutputMessage(msg: OutputMessage, writer: anytype) !void {
     switch (msg) {
         .ack => |ack| {
-            try writer.print("A, {d}, {d}\n", .{ ack.user_id, ack.user_order_id });
+            try writer.print("A, {d}, {d}, {s}\n", .{ 
+                ack.user_id, 
+                ack.user_order_id,
+                ack.getSymbol(),
+             });
         },
         .trade => |trade| {
-            try writer.print("T, {d}, {d}, {d}, {d}, {d}, {d}\n", .{
+            try writer.print("T, {d}, {d}, {d}, {d}, {d}, {d}, {s}\n", .{
                 trade.user_id_buy,
                 trade.user_order_id_buy,
                 trade.user_id_sell,
                 trade.user_order_id_sell,
                 trade.price,
                 trade.quantity,
+                trade.getSymbol(),
             });
         },
         .top_of_book => |tob_msg| {
             const side_char = tob_msg.side.toChar();
             if (tob_msg.tob.eliminated) {
-                try writer.print("B, {c}, -, -\n", .{side_char});
+                try writer.print("B, {c}, -, -, {s}\n", .{side_char, tob.getSymbol()});
             } else {
-                try writer.print("B, {c}, {d}, {d}\n", .{
+                try writer.print("B, {c}, {d}, {d}, {s}\n", .{
                     side_char,
                     tob_msg.tob.price,
                     tob_msg.tob.total_quantity,
+                    tob_msg.getSymbol(),
                 });
             }
         },
         .cancel_ack => |cancel| {
-            try writer.print("C, {d}, {d}\n", .{ cancel.user_id, cancel.user_order_id });
+            try writer.print("C, {d}, {d}, {s}\n", .{ 
+                cancel.user_id, 
+                cancel.user_order_id,
+                cancel.getSymbol(),
+            });
         },
     }
 }
