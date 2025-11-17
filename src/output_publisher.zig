@@ -131,7 +131,7 @@ pub const OutputPublisher = struct {
         
         // Flush to ensure real-time output
         // This is critical for piping to other programs or tee
-        try self.stdout.context.sync();
+        // try self.stdout.context.sync();
     }
 };
 
