@@ -35,9 +35,12 @@ pub const MatchingEngine = struct {
 
     pub fn deinit(self: *MatchingEngine) void {
         // Clean up all order books
-        var it = self.order_books.valueIterator();
-        while (it.next()) |book_ptr| {
-            book_ptr.*.deinit();
+        var it = self.order_books.iterator();
+        while (it.next()) |entry| {
+            // Free the symbol key
+            self.allocator.free(entry.key_ptr.*);
+            // Free the order book
+            entry.value_ptr.*.deinit();
         }
 
         // Clean up symbol strings stored in order_to_symbol
@@ -59,7 +62,7 @@ pub const MatchingEngine = struct {
         switch (msg) {
             .new_order => |order_msg| try self.processNewOrder(order_msg, outputs),
             .cancel_order => |cancel_msg| try self.processCancelOrder(cancel_msg, outputs),
-            .flush => try self.processFlush(),
+            .flush => try self.processFlush(outputs),
         }
     }
 
@@ -141,14 +144,33 @@ pub const MatchingEngine = struct {
     }
 
     /// Process flush - clear all order books
-    fn processFlush(self: *MatchingEngine) !void {
-        // Clean up all order books
-        var it = self.order_books.valueIterator();
-        while (it.next()) |book_ptr| {
-            book_ptr.*.deinit();
+    fn processFlush(self: *MatchingEngine, outputs: *std.ArrayList(OutputMessage)) !void {
+        // First, broadcast cancel acks for ALL open orders
+        var order_it = self.order_to_symbol.keyIterator();
+        while (order_it.next()) |key_ptr| {
+            const key = key_ptr.*;
+            // Decode the order key back to user_id and user_order_id
+            const user_id: u32 = @truncate(key >> 32);
+            const user_order_id: u32 = @truncate(key);
+        
+            try outputs.append(.{
+                .cancel_ack = .{
+                    .user_id = user_id,
+                    .user_order_id = user_order_id,
+                },
+            });
         }
 
-        // Clean up symbol strings
+        // Clean up all order books
+        var book_it = self.order_books.iterator();
+        while (book_it.next()) |entry| {
+            // Free the symbol key
+            self.allocator.free(entry.key_ptr.*);
+            // Free the order book
+            entry.value_ptr.*.deinit();
+        }
+
+        // Clean up symbol strings in order_to_symbol
         var symbol_it = self.order_to_symbol.valueIterator();
         while (symbol_it.next()) |symbol_ptr| {
             self.allocator.free(symbol_ptr.*);
@@ -157,7 +179,7 @@ pub const MatchingEngine = struct {
         // Clear maps
         self.order_books.clearRetainingCapacity();
         self.order_to_symbol.clearRetainingCapacity();
-    }
+     }
 
     /// Get or create order book for symbol
     fn getOrCreateOrderBook(self: *MatchingEngine, symbol: []const u8) !*OrderBook {
