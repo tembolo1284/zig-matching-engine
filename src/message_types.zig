@@ -279,7 +279,7 @@ pub fn formatOutputMessage(msg: OutputMessage, writer: anytype) !void {
         .top_of_book => |tob_msg| {
             const side_char = tob_msg.side.toChar();
             if (tob_msg.tob.eliminated) {
-                try writer.print("B, {c}, -, -, {s}\n", .{side_char, tob.getSymbol()});
+                try writer.print("B, {c}, -, -, {s}\n", .{side_char, tob_msg.getSymbol()});
             } else {
                 try writer.print("B, {c}, {d}, {d}, {s}\n", .{
                     side_char,

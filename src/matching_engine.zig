@@ -5,10 +5,11 @@ const InputMessage = message_types.InputMessage;
 const OutputMessage = message_types.OutputMessage;
 const NewOrderMsg = message_types.NewOrderMsg;
 const CancelOrderMsg = message_types.CancelOrderMsg;
+const CancelAckMsg = message_types.CancelAckMsg;
 const Order = @import("order.zig").Order;
 
 /// Multi-symbol order book orchestrator
-/// 
+///
 /// Design decisions:
 /// - One OrderBook per symbol (complete isolation)
 /// - StringHashMap for O(1) symbol routing
@@ -88,7 +89,7 @@ pub const MatchingEngine = struct {
         // Track order location for future cancellation
         // We need to store a copy of the symbol string since msg may be temporary
         const key = Order.makeOrderKey(msg.user_id, msg.user_order_id);
-        
+
         // Check if we already have this order tracked (shouldn't happen, but be safe)
         if (!self.order_to_symbol.contains(key)) {
             const symbol_copy = try self.allocator.dupe(u8, msg.getSymbol());
@@ -113,40 +114,39 @@ pub const MatchingEngine = struct {
             if (self.order_books.get(symbol)) |book| {
                 // Cancel the order
                 try book.cancelOrder(msg.user_id, msg.user_order_id, outputs);
-
-                // Remove from tracking map
-                const symbol_to_free = self.order_to_symbol.get(key).?;
-                _ = self.order_to_symbol.remove(key);
-                self.allocator.free(symbol_to_free);
             } else {
                 // Order book doesn't exist - still send cancel ack
-                try outputs.append(.{
-                    .cancel_ack = .{
-                        .user_id = msg.user_id,
-                        .user_order_id = msg.user_order_id,
-                    },
-                });
-
-                // Clean up tracking
-                const symbol_to_free = self.order_to_symbol.get(key).?;
-                _ = self.order_to_symbol.remove(key);
-                self.allocator.free(symbol_to_free);
-            }
-        } else {
-            // Order not found - still send cancel ack
-            try outputs.append(.{
-                .cancel_ack = .{
+                var cancel_ack = CancelAckMsg{
                     .user_id = msg.user_id,
                     .user_order_id = msg.user_order_id,
-                },
-            });
+                    .symbol = undefined,
+                    .symbol_len = 0,
+                };
+                try cancel_ack.setSymbol(symbol);
+                try outputs.append(.{ .cancel_ack = cancel_ack });
+            }
+
+            // Clean up tracking (whether book existed or not)
+            const symbol_to_free = self.order_to_symbol.get(key).?;
+            _ = self.order_to_symbol.remove(key);
+            self.allocator.free(symbol_to_free);
+        } else {
+            // Order not found - still send cancel ack
+            var cancel_ack = CancelAckMsg{
+                .user_id = msg.user_id,
+                .user_order_id = msg.user_order_id,
+                .symbol = undefined,
+                .symbol_len = 0,
+            };
+            try cancel_ack.setSymbol("UNKNOWN");
+            try outputs.append(.{ .cancel_ack = cancel_ack });
         }
     }
 
     /// Process flush - clear all order books
     fn processFlush(self: *MatchingEngine, outputs: *std.ArrayList(OutputMessage)) !void {
         // First, broadcast cancel acks for ALL open orders
-        var order_it = self.order_to_symbol.keyIterator();
+        var order_it = self.order_to_symbol.iterator();
         while (order_it.next()) |entry| {
             const key = entry.key_ptr.*;
             const symbol = entry.value_ptr.*;
@@ -154,12 +154,12 @@ pub const MatchingEngine = struct {
             // Decode the order key back to user_id and user_order_id
             const user_id: u32 = @truncate(key >> 32);
             const user_order_id: u32 = @truncate(key);
-        
+
             var cancel_ack = CancelAckMsg{
-                    .user_id = user_id,
-                    .user_order_id = user_order_id,
-                    .symbol = undefined,
-                    .symbol_len = 0, 
+                .user_id = user_id,
+                .user_order_id = user_order_id,
+                .symbol = undefined,
+                .symbol_len = 0,
             };
             try cancel_ack.setSymbol(symbol);
             try outputs.append(.{ .cancel_ack = cancel_ack });
@@ -183,7 +183,7 @@ pub const MatchingEngine = struct {
         // Clear maps
         self.order_books.clearRetainingCapacity();
         self.order_to_symbol.clearRetainingCapacity();
-     }
+    }
 
     /// Get or create order book for symbol
     fn getOrCreateOrderBook(self: *MatchingEngine, symbol: []const u8) !*OrderBook {

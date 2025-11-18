@@ -275,7 +275,7 @@ pub const OrderBook = struct {
                 const match_qty = @min(order.remaining_qty, book_order.remaining_qty);
 
                 // Generate trade (aggressive order vs passive order)
-                const trade = if (order.side == .buy) TradeMsg{
+                var trade = if (order.side == .buy) TradeMsg{
                     .user_id_buy = order.user_id,
                     .user_order_id_buy = order.user_order_id,
                     .user_id_sell = book_order.user_id,
